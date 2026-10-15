@@ -1,0 +1,26 @@
+Demo site: http://127.0.0.1:PORT
+[  1/10] maya@brightside.example: attempt 1 failed (The site returned HTTP 503 for http://127.0.0.1:PORT/customers/new); retrying
+[  1/10] maya@brightside.example: done in 0.99s
+[  2/10] lucas@meyerplumbing.example: done in 0.21s
+[  3/10] aisha@okafor.example: done in 0.24s
+[  4/10] tom@elmandoak.example: failed (Site said: A customer with email tom@elmandoak.example already exists.) in 0.24s
+[  5/10] sofia@rossibakery.example: done in 0.22s
+[  6/10] kenji@watanabefit.example: done in 0.24s
+[  7/10] grace@kimaccounting: failed (Site said: 'grace@kimaccounting' is not a valid email address.) in 0.31s
+[  8/10] omar@haddadauto.example: attempt 1 failed (The site returned HTTP 503 for http://127.0.0.1:PORT/customers/new); retrying
+[  8/10] omar@haddadauto.example: attempt 2 failed (The site returned HTTP 503 for http://127.0.0.1:PORT/customers/new); retrying
+[  8/10] omar@haddadauto.example: done in 1.67s
+[  9/10] maya@brightside.example: skipped (duplicate of row 1)
+[ 10/10] elena@petrova.example: done in 0.24s
+Add customers to the portal: 7 done, 2 failed, 1 skipped in 6.8s
+  results: out/add-customers-to-the-portal/20261015-173231/results.xlsx
+  report:  out/add-customers-to-the-portal/20261015-173231/report.html
+page 1: 8 items (8 total)
+page 2: 8 items (16 total)
+page 3: 8 items (24 total)
+page 4: 6 items (30 total)
+Collect products: 30 done, 0 failed, 0 skipped in 3.1s
+  results: out/collect-products/20261015-173238/results.xlsx
+  report:  out/collect-products/20261015-173238/report.html
+The demo site now has 8 customers.
+(The 2 failed rows and the skipped duplicate are in the example data on purpose.)

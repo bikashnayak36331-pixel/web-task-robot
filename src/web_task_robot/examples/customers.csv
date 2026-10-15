@@ -1,0 +1,11 @@
+name,company,email,phone,plan,newsletter,notes
+Maya Patel,Brightside Dental,maya@brightside.example,555-0101,Pro,yes,Prefers email contact
+Lucas Meyer,Meyer & Sons Plumbing,lucas@meyerplumbing.example,555-0102,Starter,no,
+Aisha Okafor,Okafor Design Studio,aisha@okafor.example,555-0103,Business,yes,Annual billing
+Tom Becker,Elm & Oak Law,tom@elmandoak.example,555-0104,Pro,no,
+Sofia Rossi,Rossi Bakery,sofia@rossibakery.example,555-0105,Starter,yes,Two locations
+Kenji Watanabe,Watanabe Fitness,kenji@watanabefit.example,555-0106,Business,no,
+Grace Kim,Kim Accounting,grace@kimaccounting,555-0107,Pro,yes,Email address is incomplete on purpose
+Omar Haddad,Haddad Auto Repair,omar@haddadauto.example,555-0108,Pro,yes,
+Maya Patel,Brightside Dental,maya@brightside.example,555-0101,Pro,yes,Duplicate row on purpose
+Elena Petrova,Petrova Translations,elena@petrova.example,555-0110,Starter,no,

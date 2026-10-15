@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "web-task-robot"
+version = "1.0.0"
+description = "Fill web forms from a spreadsheet and collect data from web pages, reliably, with Playwright and simple YAML job files."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "Bikash Nayak" }]
+keywords = ["playwright", "browser-automation", "data-entry", "web-scraping", "rpa", "excel", "csv"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP :: Browsers",
+    "Topic :: Office/Business",
+]
+dependencies = [
+    "playwright>=1.45",
+    "pyyaml>=6",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+webrobot = "web_task_robot.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/bikashnayak36331-pixel/web-task-robot"
+Issues = "https://github.com/bikashnayak36331-pixel/web-task-robot/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/web_task_robot"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+# HTML templates read better on one line each
+"src/web_task_robot/demo_site.py" = ["E501"]
+"src/web_task_robot/report.py" = ["E501"]

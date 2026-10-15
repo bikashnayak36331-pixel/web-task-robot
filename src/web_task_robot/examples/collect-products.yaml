@@ -1,0 +1,27 @@
+# Collect every product from the demo portal's catalogue (4 pages) into a spreadsheet.
+name: Collect products
+type: extract
+
+login:
+  url: ${DEMO_URL}/login
+  steps:
+    - fill: { selector: "#email", value: "${PORTAL_USER}" }
+    - fill: { selector: "#password", value: "${PORTAL_PASSWORD}" }
+    - click: "button[type=submit]"
+
+start_url: ${DEMO_URL}/products
+item: ".product-card"
+fields:
+  sku: { attr: data-sku }                       # read an attribute of the item itself
+  name: ".name"
+  price: { selector: ".price", parse: number }
+  rating: { selector: ".rating", parse: number }
+  stock: ".stock"
+  url: { selector: "a.name", attr: href, absolute: true }
+next_page: "a.next"
+max_pages: 10
+
+options:
+  delay_ms: 300
+
+# output: products.csv          # optional: .csv, .xlsx or .json

@@ -1,0 +1,38 @@
+# Add every row of customers.csv to the demo portal's "Add customer" form.
+# Run the demo site first (webrobot demo-site) and set DEMO_URL, PORTAL_USER and PORTAL_PASSWORD,
+# or just run `webrobot demo`, which does all of that for you.
+name: Add customers to the portal
+type: fill
+input: customers.csv
+key: email                      # rows already done are skipped if you run the job again
+
+login:
+  url: ${DEMO_URL}/login
+  steps:
+    - fill: { selector: "#email", value: "${PORTAL_USER}" }
+    - fill: { selector: "#password", value: "${PORTAL_PASSWORD}" }   # secrets come from the environment
+    - click: "button[type=submit]"
+    - wait_for: "#customer-form"
+
+steps:
+  - goto: ${DEMO_URL}/customers/new
+  - fill: { selector: "#name", value: "{name}" }
+  - fill: { selector: "#company", value: "{company}" }
+  - fill: { selector: "#email", value: "{email}" }
+  - fill: { selector: "#phone", value: "{phone}" }
+  - select: { selector: "#plan", value: "{plan}" }
+  - check: { selector: "#newsletter", when: "{newsletter}" }
+  - fill: { selector: "#notes", value: "{notes}" }
+  - click: "#save"
+  - extract: { selector: ".alert-success .ref", as: reference }
+
+success: ".alert-success"       # the row only counts as done if this appears
+error: ".alert-error"           # if this appears, its text is recorded and the row is not retried
+
+options:
+  retries: 2                    # try a row up to 3 times on timeouts or server errors
+  retry_delay_ms: 500
+  delay_ms: 200                 # be polite: pause between rows
+  screenshots: failure          # failure | each | never
+
+# output: results.xlsx          # optional; by default results go to out/<job name>/<time>/results.xlsx
