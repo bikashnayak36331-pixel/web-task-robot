@@ -15,6 +15,20 @@ def test_read_csv_with_bom_and_blank_lines(tmp_path):
     assert rows == [{"name": "Ana", "email": "ana@x.example"}, {"name": "Bo", "email": "bo@x.example"}]
 
 
+@pytest.mark.parametrize(
+    "data",
+    [
+        "name;email\nJosé;jose@x.example\n".encode("cp1252"),  # Excel "CSV" in many countries
+        "name\temail\nJosé\tjose@x.example\n".encode(),
+        "name,email\nJosé,jose@x.example\n".encode("utf-8-sig"),
+    ],
+)
+def test_read_csv_encodings_and_separators(tmp_path, data):
+    p = tmp_path / "a.csv"
+    p.write_bytes(data)
+    assert read_rows(p) == (["name", "email"], [{"name": "José", "email": "jose@x.example"}])
+
+
 def test_read_xlsx_named_sheet(tmp_path):
     wb = Workbook()
     wb.active.title = "Notes"
@@ -44,3 +58,6 @@ def test_write_all_formats(tmp_path):
     assert ws["B2"].fill.fgColor.rgb.endswith("D1F2E3") and ws["B3"].fill.fgColor.rgb.endswith("F8D7DA")
     with pytest.raises(JobError):
         write_rows(tmp_path / "r.txt", cols, rows)
+    # JSON has the same columns as the other formats
+    extra = [{"name": "Ana", "status": "done", "internal": 1}]
+    assert json.loads(write_rows(tmp_path / "e.json", cols, extra).read_text()) == [{"name": "Ana", "status": "done"}]

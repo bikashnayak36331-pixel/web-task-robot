@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "web-task-robot"
-version = "1.0.0"
+version = "1.1.0"
 description = "Fill web forms from a spreadsheet and collect data from web pages, reliably, with Playwright and simple YAML job files."
 readme = "README.md"
 license = "MIT"

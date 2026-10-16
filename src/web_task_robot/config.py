@@ -10,6 +10,7 @@ passwords and other secrets, which should never be written in the job file).
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import re
 from dataclasses import dataclass, field
@@ -27,6 +28,7 @@ STEP_TYPES = {
     "uncheck": "selector",
     "click": "selector",
     "press": "selector+key",
+    "upload": "selector+file",
     "wait_for": "selector",
     "wait_ms": "number",
     "extract": "selector+as",
@@ -34,8 +36,13 @@ STEP_TYPES = {
     "screenshot": "name",
 }
 
+OUTPUT_SUFFIXES = (".csv", ".xlsx", ".json")
+WAIT_STATES = ("visible", "hidden", "attached", "detached")
+
 _COLUMN = re.compile(r"(?<!\$)\{([^{}]+)\}")
 _ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# Both in one pass, so a value that was just filled in is never scanned again (a password may contain "{x}").
+_PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|(?<!\$)\{([^{}]+)\}")
 
 
 class JobError(ValueError):
@@ -59,6 +66,7 @@ class Options:
     headless: bool = True
     typing_delay_ms: int = 0
     slow_mo_ms: int = 0
+    dialogs: str = "dismiss"  # what to do with alert/confirm/prompt boxes: dismiss | accept
 
 
 @dataclass
@@ -102,31 +110,49 @@ def render(template: Any, row: dict[str, Any] | None = None, env: dict[str, str]
     text = "" if template is None else str(template)
     env = os.environ if env is None else env
 
-    def env_sub(m: re.Match) -> str:
-        name = m.group(1)
-        if name not in env:
-            raise JobError(f"Environment variable {name} is not set")
-        return env[name]
+    def sub(m: re.Match) -> str:
+        var, column = m.group(1), m.group(2)
+        if var is not None:
+            if var not in env:
+                raise JobError(f"Environment variable {var} is not set")
+            return env[var]
+        if row is None:
+            return m.group(0)
+        return _cell(row, column)
 
-    text = _ENV.sub(env_sub, text)
-    if row is not None:
-        text = _COLUMN.sub(lambda m: _cell(row, m.group(1)), text)
-    return text
+    return _PLACEHOLDER.sub(sub, text)
+
+
+def cell_text(value: Any) -> str:
+    """A cell value as the text a person would type: 7 not 7.0, 2026-10-20 not 2026-10-20 00:00:00."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return str(value)
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    if isinstance(value, dt.datetime):
+        if (value.hour, value.minute, value.second) == (0, 0, 0):
+            return value.date().isoformat()
+        return value.strftime("%Y-%m-%d %H:%M" if value.second == 0 else "%Y-%m-%d %H:%M:%S")
+    if isinstance(value, dt.date):
+        return value.isoformat()
+    if isinstance(value, dt.time):
+        return value.strftime("%H:%M" if value.second == 0 else "%H:%M:%S")
+    return str(value)
 
 
 def _cell(row: dict[str, Any], name: str) -> str:
     if name not in row:
         raise JobError(f"Column '{name}' is not in the input file")
-    value = row[name]
-    if value is None:
-        return ""
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value)
+    return cell_text(row[name])
 
 
 def truthy(value: Any) -> bool:
     return str(value).strip().lower() in ("1", "true", "yes", "y", "x", "on", "checked")
+
+
+_BOOL_WORDS = {"true": True, "yes": True, "on": True, "1": True, "false": False, "no": False, "off": False, "0": False}
 
 
 def _parse_steps(raw: Any, where: str) -> list[Step]:
@@ -162,6 +188,8 @@ def _parse_steps(raw: Any, where: str) -> list[Step]:
                 continue
             if part not in args or args[part] in (None, ""):
                 raise JobError(f"{loc}: '{kind}' needs '{part}'")
+        if kind == "wait_for" and args.get("state", "visible") not in WAIT_STATES:
+            raise JobError(f"{loc}: wait_for state must be one of: {', '.join(WAIT_STATES)}")
         steps.append(Step(kind, args, loc))
     return steps
 
@@ -176,13 +204,20 @@ def _options(raw: Any) -> Options:
             raise JobError(f"options.{key} is not a known option")
         expected = type(getattr(opts, key))
         if expected is bool:
-            value = bool(value)
+            if not isinstance(value, bool):
+                value = _BOOL_WORDS.get(str(value).strip().lower())
+                if value is None:
+                    raise JobError(f"options.{key} must be true or false")
         elif expected is int:
-            if not isinstance(value, int) or value < 0:
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise JobError(f"options.{key} must be a whole number of 0 or more")
+        elif expected is str:
+            value = str(value).strip().lower()
         setattr(opts, key, value)
     if opts.screenshots not in ("failure", "each", "never"):
         raise JobError("options.screenshots must be failure, each or never")
+    if opts.dialogs not in ("dismiss", "accept"):
+        raise JobError("options.dialogs must be dismiss or accept")
     return opts
 
 
@@ -232,6 +267,8 @@ def load_job(path: str | Path) -> Job:
 
     if raw.get("output"):
         job.output = (base / str(raw["output"])).resolve()
+        if job.output.suffix.lower() not in OUTPUT_SUFFIXES:
+            raise JobError(f"output must end in .csv, .xlsx or .json, not '{job.output.name}'")
 
     if jtype == "fill":
         if not raw.get("input"):
@@ -239,8 +276,8 @@ def load_job(path: str | Path) -> Job:
         job.input = (base / str(raw["input"])).resolve()
         if job.input.suffix.lower() not in (".csv", ".xlsx"):
             raise JobError("input must be a .csv or .xlsx file")
-        job.sheet = raw.get("sheet")
-        job.key = raw.get("key")
+        job.sheet = None if raw.get("sheet") is None else str(raw["sheet"])  # `sheet: 2024` is a name, not a number
+        job.key = None if raw.get("key") is None else str(raw["key"])
         job.steps = _parse_steps(raw.get("steps"), "steps")
         if not job.steps:
             raise JobError("A fill job needs at least one step")
@@ -258,11 +295,16 @@ def load_job(path: str | Path) -> Job:
             spec = {"selector": spec} if isinstance(spec, str) else dict(spec or {})
             if "selector" not in spec and "attr" not in spec:
                 raise JobError(f"fields.{name} needs a selector (or attr to read from the item itself)")
+            if spec.get("selector") in (".", ":scope"):
+                spec.pop("selector")  # "." means the item itself
             if spec.get("parse", "text") not in ("text", "number", "int"):
                 raise JobError(f"fields.{name}.parse must be text, number or int")
             job.fields[str(name)] = spec
         job.next_page = raw.get("next_page")
-        job.max_pages = int(raw.get("max_pages", 50))
+        max_pages = raw.get("max_pages", 50)
+        if isinstance(max_pages, bool) or not isinstance(max_pages, int) or max_pages < 1:
+            raise JobError("max_pages must be a whole number of 1 or more")
+        job.max_pages = max_pages
     return job
 
 
