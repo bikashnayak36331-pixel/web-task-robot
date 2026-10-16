@@ -16,8 +16,9 @@
 | Problem | What the robot does |
 |---|---|
 | The site is slow or flaky (timeouts, HTTP 5xx, 429) | Retries the row (default: up to 3 tries) with a pause in between |
-| The site rejects the data ("email already exists", a browser validation error) | Records the site's own message and **doesn't** retry, since retrying wouldn't help |
-| The job stops halfway (crash, laptop closed) | Run it again: rows already done are skipped using a checkpoint |
+| A form was sent but the site took too long to answer | **Doesn't** send it again (that could save the same record twice). The row is marked failed with a note to check the site. After a form is sent, the robot only retries if the site answers with an error page (HTTP 5xx or 429) |
+| The site rejects the data ("email already exists", a browser validation error) | Records the site's own message and **doesn't** retry, since retrying wouldn't help. This also works on forms that save in the background with JavaScript |
+| The job stops halfway (crash, laptop closed, Ctrl+C) | Ctrl+C finishes the current row and still writes the results. Run the job again: rows already done are skipped using a checkpoint. The checkpoint belongs to one site and input file, so a test run can't make the real run skip rows |
 | The same record appears twice in your file | The second copy is skipped and marked as a duplicate |
 | "Did it really work?" | Optional success check per row, a screenshot of every failure, an Excel file with a status column, and an HTML report |
 | Passwords | Kept in environment variables (`${PORTAL_PASSWORD}`), never in the job file or the results |
@@ -53,12 +54,36 @@ Every run writes a results spreadsheet and this report:
 
 ## Write your own job
 
-```bash
-webrobot examples my-jobs        # copies the example jobs and CSV into ./my-jobs to edit
-webrobot check my-jobs/add-customers.yaml   # checks the file, the CSV columns and the environment variables
-webrobot run my-jobs/add-customers.yaml --limit 3 --headed   # try 3 rows with the browser visible
-webrobot run my-jobs/add-customers.yaml                      # then the whole file
-```
+Start by copying the examples and running them yourself against the practice site.
+
+1. In one terminal, start the practice site and leave it running:
+
+   ```bash
+   webrobot demo-site                # http://127.0.0.1:8765, login demo@example.com / demo-pass
+   ```
+
+2. In a second terminal, copy the examples and tell them where the site is and how to log in:
+
+   ```bash
+   webrobot examples my-jobs         # copies the example jobs and CSV into ./my-jobs to edit
+   export DEMO_URL=http://127.0.0.1:8765 PORTAL_USER=demo@example.com PORTAL_PASSWORD=demo-pass
+   ```
+
+   On Windows PowerShell, set the variables like this instead:
+
+   ```powershell
+   $env:DEMO_URL="http://127.0.0.1:8765"; $env:PORTAL_USER="demo@example.com"; $env:PORTAL_PASSWORD="demo-pass"
+   ```
+
+3. Check the job, try it on a few rows, then run it all:
+
+   ```bash
+   webrobot check my-jobs/add-customers.yaml                    # checks the file, the CSV columns and the variables
+   webrobot run my-jobs/add-customers.yaml --limit 3 --headed   # try 3 rows with the browser visible
+   webrobot run my-jobs/add-customers.yaml                      # then the whole file
+   ```
+
+For your own site, change the URLs and selectors in the YAML file, and set your own variables for the login.
 
 **Fill a form for every row** (`{column}` comes from the row; `${VAR}` comes from the environment):
 
@@ -96,14 +121,17 @@ type: extract
 start_url: https://shop.example.com/products
 item: ".product-card"
 fields:
-  sku: { attr: data-sku }
+  sku: { attr: data-sku }       # an attribute of the item itself
   name: ".name"
   price: { selector: ".price", parse: number }
   url: { selector: "a", attr: href, absolute: true }
-next_page: "a.next"
+  # whole: "."                  # "." is the item itself (its text)
+next_page: "a.next"             # a link, or a button that loads the next items with JavaScript
 max_pages: 20
 output: products.xlsx          # .csv, .xlsx or .json
 ```
+
+If a page has no items, the robot says so and stops. If a later page fails to load, the rows collected so far are still saved.
 
 <details><summary><b>All step types and options</b></summary>
 
@@ -113,9 +141,10 @@ output: products.xlsx          # .csv, .xlsx or .json
 | `fill` | `- fill: { selector: "#name", value: "{name}" }` | |
 | `type` | `- type: { selector: "#search", value: "{q}" }` | Types key by key, for fields that react to typing |
 | `select` | `- select: { selector: "#plan", value: "{plan}" }` | Matches the option's value or its label |
-| `check` / `uncheck` | `- check: { selector: "#terms", when: "{agree}" }` | Without `when`, it always ticks |
+| `check` / `uncheck` | `- check: { selector: "#terms", when: "{agree}" }` | Without `when`, it always ticks. Works for radio buttons too: `- check: "#size-{size}"` |
 | `click` | `- click: "#save"` | Then checks for server errors, the `error` selector and browser validation |
-| `press` | `- press: { selector: "#q", key: Enter }` | |
+| `press` | `- press: { selector: "#q", key: Enter }` | Key names such as `Enter`, `Tab`, `Escape`, `Control+a` (any capitalisation) |
+| `upload` | `- upload: { selector: "#file", file: "{attachment}" }` | A file path from the row or the job file. A relative path is relative to the job file |
 | `wait_for` | `- wait_for: ".results"` | Or `{ selector: ..., state: hidden }` |
 | `wait_ms` | `- wait_ms: 500` | |
 | `extract` | `- extract: { selector: ".ref", as: reference }` | Use `attr:` to read an attribute |
@@ -124,7 +153,7 @@ output: products.xlsx          # .csv, .xlsx or .json
 
 | Option | Default | Meaning |
 |---|---|---|
-| `retries` | 2 | Extra tries for a row after timeouts or server errors |
+| `retries` | 2 | Extra tries for a row after timeouts or server errors (once a form is sent, only after server errors) |
 | `retry_delay_ms` | 1000 | Pause before a retry |
 | `delay_ms` | 250 | Pause between rows (be polite to the site) |
 | `timeout_ms` | 15000 | How long to wait for an element or a page |
@@ -132,6 +161,9 @@ output: products.xlsx          # .csv, .xlsx or .json
 | `headless` | true | `--headed` on the command line shows the browser |
 | `typing_delay_ms` | 0 | Type key by key with this delay |
 | `slow_mo_ms` | 0 | Pause between every browser action (for watching or recording) |
+| `dialogs` | `dismiss` | What to do with alert, "Are you sure?" and prompt boxes: `dismiss` (Cancel) or `accept` (OK) |
+
+Input files: `.csv` (comma, semicolon or tab separated; UTF-8 or the older Windows encoding) or `.xlsx`. Excel dates are typed as `2026-10-20`, the format date fields expect. In the results Excel file, text from websites is always stored as text, never as a formula.
 
 Command-line options for `webrobot run`:
 
@@ -141,7 +173,24 @@ Command-line options for `webrobot run`:
 - `--headed`: show the browser.
 - `--slow-mo MS`: pause between browser actions.
 - `--video DIR`: record a video of the run.
+
+Exit codes: 0 when every row worked, 1 when some rows failed, 2 for a problem in the job file, and 130 after Ctrl+C.
 </details>
+
+## Tested end to end
+
+Version 1.1.0 came out of a full test on 16 Oct 2026, which found 26 problems, all fixed (see the [changelog](CHANGELOG.md)). The test covered:
+
+- **A clean install** from GitHub on a new Linux machine, following this README.
+- **Every command, step and option**, against the practice site and local test pages: a slow server, JavaScript forms and lists, Excel dates, uploads, confirm boxes, Ctrl+C and odd files.
+- **Public practice websites:**
+  - [Books to Scrape](https://books.toscrape.com/): 60 books over 3 pages. Titles, prices and links match the site.
+  - [Quotes to Scrape](https://quotes.toscrape.com/), including its JavaScript and delayed-loading versions.
+  - [The Internet](https://the-internet.herokuapp.com/): dropdowns, checkboxes, key presses, content that loads later, confirm boxes, and real HTTP 503 errors (retried, then reported).
+  - The [Selenium test form](https://www.selenium.dev/selenium/web/web-form.html).
+  - The [httpbin](https://httpbin.org/forms/post) order form: the server received every field exactly as typed.
+
+GitHub Actions runs the tests on Linux (Python 3.10, 3.12 and 3.13), Windows and macOS.
 
 ## Use it responsibly
 
@@ -152,7 +201,7 @@ Only automate sites you own or have permission to use, and follow their terms. K
 ```bash
 git clone https://github.com/bikashnayak36331-pixel/web-task-robot && cd web-task-robot
 pip install -e ".[dev]" && python -m playwright install chromium
-pytest                          # 27 tests, including end-to-end runs in headless Chromium against the demo site
+pytest                          # 55 tests, including end-to-end runs in headless Chromium against local test sites
 ruff check . && ruff format --check .
 python scripts/record_demo.py   # re-record docs/images/demo.gif and report.png (needs ffmpeg)
 ```

@@ -35,6 +35,14 @@ def test_examples_are_valid():
         ("type: fill\ninput: rows.csv\nsteps:\n  - click: '#x'\nfoo: 1\n", "Unknown field(s)"),
         ("type: fill\ninput: rows.csv\nsteps:\n  - click: '#x'\n    wait_for: '#y'\n", "exactly one action"),
         ("- just a list\n", "must contain a mapping"),
+        ("type: fill\ninput: rows.csv\noutput: out.txt\nsteps:\n  - click: '#x'\n", "output must end in"),
+        ("type: extract\nstart_url: http://x\nitem: .a\nfields: {a: .a}\nmax_pages: abc\n", "max_pages must be"),
+        ("type: extract\nstart_url: http://x\nitem: .a\nfields: {a: .a}\nmax_pages: 0\n", "max_pages must be"),
+        ("type: fill\ninput: rows.csv\nsteps:\n  - click: '#x'\noptions: {retries: true}\n", "whole number"),
+        ("type: fill\ninput: rows.csv\nsteps:\n  - click: '#x'\noptions: {headless: maybe}\n", "true or false"),
+        ("type: fill\ninput: rows.csv\nsteps:\n  - click: '#x'\noptions: {dialogs: ignore}\n", "dismiss or accept"),
+        ("type: fill\ninput: rows.csv\nsteps:\n  - wait_for: {selector: '#x', state: gone}\n", "state must be"),
+        ("type: fill\ninput: rows.csv\nsteps:\n  - upload: {selector: '#x'}\n", "'upload' needs 'file'"),
     ],
 )
 def test_helpful_errors(tmp_path, body, message):
@@ -51,6 +59,34 @@ def test_templates_and_env():
     with pytest.raises(JobError, match="Column 'nope'"):
         render("{nope}", row, env={})
     assert truthy("Yes") and truthy("x") and not truthy("no") and not truthy("")
+    # a secret that contains braces is used as it is (v1.0.0 read "{c}" in it as a column name)
+    assert render("${TOKEN}-{name}", row, env={"TOKEN": "ab{c}d"}) == "ab{c}d-Ana"
+    assert render("{name}", None, env={}) == "{name}"  # login steps have no row
+
+
+def test_cell_text_is_what_a_person_would_type():
+    from datetime import date, datetime, time
+
+    from web_task_robot.config import cell_text
+
+    assert cell_text(datetime(2026, 10, 20)) == "2026-10-20"
+    assert cell_text(datetime(2026, 10, 20, 14, 30)) == "2026-10-20 14:30"
+    assert cell_text(date(2026, 1, 2)) == "2026-01-02" and cell_text(time(9, 5)) == "09:05"
+    assert cell_text(7.0) == "7" and cell_text(7.5) == "7.5" and cell_text(None) == "" and cell_text(True) == "True"
+
+
+def test_options_and_names(tmp_path):
+    job = load_job(
+        write(
+            tmp_path,
+            "type: fill\ninput: rows.csv\nsheet: 2024\nkey: 7\nsteps:\n  - click: '#x'\n"
+            "options: {headless: 'false', screenshots: Each, dialogs: ACCEPT}\n",
+        )
+    )
+    assert job.options.headless is False and job.options.screenshots == "each" and job.options.dialogs == "accept"
+    assert job.sheet == "2024" and job.key == "7"
+    ext = load_job(write(tmp_path, "type: extract\nstart_url: http://x\nitem: li\nfields: {text: '.'}\n", "e.yaml"))
+    assert ext.fields["text"] == {}  # "." reads the item itself
 
 
 def test_column_and_env_checks(tmp_path, monkeypatch):

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import csv
+import io
 import json
 from pathlib import Path
 from typing import Any
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
@@ -24,10 +26,13 @@ def read_rows(path: Path, sheet: str | None = None) -> tuple[list[str], list[dic
     if not path.exists():
         raise JobError(f"Input file not found: {path}")
     if path.suffix.lower() == ".csv":
-        with path.open(newline="", encoding="utf-8-sig") as f:
-            reader = csv.DictReader(f)
-            headers = [h.strip() for h in (reader.fieldnames or [])]
-            rows = [{h.strip(): (v or "").strip() for h, v in r.items() if h} for r in reader]
+        text = _decode(path.read_bytes())
+        first_line = text.split("\n", 1)[0]
+        # Excel in many countries saves "CSV" with semicolons; tab-separated files are common too.
+        delimiter = max((",", ";", "\t"), key=first_line.count) if first_line else ","
+        reader = csv.DictReader(io.StringIO(text, newline=""), delimiter=delimiter)
+        headers = [h.strip() for h in (reader.fieldnames or [])]
+        rows = [{h.strip(): (v or "").strip() for h, v in r.items() if isinstance(h, str) and h} for r in reader]
     else:
         wb = load_workbook(path, read_only=True, data_only=True)
         if sheet and sheet not in wb.sheetnames:
@@ -50,11 +55,27 @@ def read_rows(path: Path, sheet: str | None = None) -> tuple[list[str], list[dic
     return headers, rows
 
 
+def _decode(data: bytes) -> str:
+    """UTF-8 (with or without a BOM), or the Windows encoding that older Excel versions use for "CSV"."""
+    try:
+        return data.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return data.decode("cp1252", errors="replace")
+
+
+def _xlsx_value(value: Any) -> Any:
+    """Make a value safe for a worksheet: no control characters, and text is never turned into a formula."""
+    if isinstance(value, str):
+        return ILLEGAL_CHARACTERS_RE.sub("", value)
+    return value
+
+
 def write_rows(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     suffix = path.suffix.lower()
     if suffix == ".json":
-        path.write_text(json.dumps(rows, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        data = [{h: r.get(h, "") for h in headers} for r in rows]
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
     elif suffix == ".csv":
         with path.open("w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=headers, extrasaction="ignore")
@@ -66,7 +87,11 @@ def write_rows(path: Path, headers: list[str], rows: list[dict[str, Any]]) -> Pa
         ws.title = "Results"
         ws.append(headers)
         for r in rows:
-            ws.append([r.get(h, "") for h in headers])
+            ws.append([_xlsx_value(r.get(h, "")) for h in headers])
+        for row in ws.iter_rows(min_row=2):
+            for cell in row:
+                if cell.data_type == "f":  # scraped text such as "=HYPERLINK(...)" stays text
+                    cell.data_type = "s"
         for cell in ws[1]:
             cell.font = Font(bold=True, color="FFFFFF")
             cell.fill = PatternFill("solid", fgColor="1F2933")

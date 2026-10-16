@@ -18,6 +18,7 @@ box-shadow:0 1px 3px rgba(0,0,0,.08)}th{background:#1f2933;color:#fff;text-align
 td{padding:6px 9px;border-bottom:1px solid #e4e7eb;font-size:13px;vertical-align:top}
 .done{background:#d1f2e3}.failed{background:#f8d7da}.skipped{background:#eceff1}
 img{max-width:180px;border:1px solid #cbd2d9;border-radius:4px}
+.note{background:#fff4ce;border:1px solid #c99a2e;border-radius:6px;padding:10px 14px;margin:0 0 16px}
 """
 
 
@@ -46,12 +47,13 @@ def write_report(result: RunResult, columns: list[str]):
             else:
                 cells.append(f"<td>{html.escape(str(v))}</td>")
         body.append("<tr>" + "".join(cells) + "</tr>")
-    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(job.name)} · run report
-</title><style>{STYLE}</style></head><body>
+    note = f'<div class="note">{html.escape(result.note)}</div>' if result.note else ""
+    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(job.name)} · run report</title>
+<style>{STYLE}</style></head><body>
 <h1>{html.escape(job.name)}</h1>
 <div class="muted">{job.type} job · {html.escape(job.path.name)} · finished {datetime.now():%Y-%m-%d %H:%M:%S} ·
 output: {html.escape(result.output.name if result.output else "")}</div>
 <div class="cards">{"".join(f'<div class="card"><span class="muted">{k}</span><b>{v}</b></div>' for k, v in cards)}</div>
-<table><tr>{head}</tr>{"".join(body)}</table></body></html>"""
+{note}<table><tr>{head}</tr>{"".join(body)}</table></body></html>"""
     path.write_text(doc, encoding="utf-8")
     return path
