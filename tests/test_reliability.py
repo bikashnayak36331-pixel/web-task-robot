@@ -60,20 +60,19 @@ steps:
   - click: "#save"
 success: ".alert-success"
 error: ".alert-error"
-options: { retries: 2, retry_delay_ms: 50, delay_ms: 0, timeout_ms: 1500 }
+options: { retries: 2, retry_delay_ms: 50, delay_ms: 0, timeout_ms: 3000 }
 """
 
 
 def test_a_form_sent_to_a_slow_site_is_not_sent_again(tmp_path, monkeypatch, quiet):
     log, _ = quiet
-    with slow_demo_site(2.5) as site:
+    with slow_demo_site(5) as site:  # slower than timeout_ms (3 s)
         monkeypatch.setenv("DEMO_URL", site.url)
         monkeypatch.setenv("PORTAL_USER", site.state.user)
         monkeypatch.setenv("PORTAL_PASSWORD", site.state.password)
         job = job_file(tmp_path, SLOW_JOB, "name,email,plan\nNew Person,new@person.example,Pro\n")
         res = run_fill(job, tmp_path / "out" / "r", progress=log)
-        time.sleep(1.5)  # let the slow post finish on the server
-        posts = site.state.posts
+    posts = site.state.posts  # read after the server has finished every request
     row = res.rows[0]
     assert row["status"] == "failed" and row["attempts"] == 1
     assert "not retried: the form may already have been sent" in row["message"]
@@ -142,7 +141,7 @@ def test_next_link_that_changes_nothing_stops_cleanly(tmp_path, monkeypatch, qui
         job = job_file(
             tmp_path,
             "type: extract\nstart_url: ${LAB}/weird\nitem: .it\nfields: {t: .t}\nnext_page: .it\n"
-            "max_pages: 5\noptions: {delay_ms: 0, timeout_ms: 1000}\n",
+            "max_pages: 5\noptions: {delay_ms: 0, timeout_ms: 4000}\n",  # slow CI machines need time to load
         )
         res = run_extract(job, tmp_path / "out" / "e", progress=log)
     assert len(res.rows) == 2 and "did not show new items" in res.note
