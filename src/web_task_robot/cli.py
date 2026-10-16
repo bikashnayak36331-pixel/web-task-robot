@@ -97,7 +97,7 @@ def cmd_demo(args) -> int:
                 job = load_job(EXAMPLES / name)
                 if args.headed:
                     job.options.headless = False
-                res = run_job(job, Path(args.out), fresh=True)
+                res = run_job(job, Path(args.out) / "demo", fresh=True)  # its own folder: its own checkpoint
                 print(_summary(res))
                 if res.stopped:
                     return EXIT_STOPPED

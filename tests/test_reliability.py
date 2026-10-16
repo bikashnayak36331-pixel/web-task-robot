@@ -280,8 +280,29 @@ def test_ctrl_c_saves_results_and_stops(tmp_path):
     assert "Stopped with Ctrl+C after" in out
     results = list((tmp_path / "out").rglob("results.xlsx"))
     assert results and load_workbook(results[0]).active.max_row >= 2
-    done = json.loads(next((tmp_path / "out").rglob("checkpoint.json")).read_text())
+    done = json.loads(next((tmp_path / "out").rglob("checkpoint.json")).read_text())["done"]
     assert customers == 1 + len(done), "every saved customer is in the checkpoint"
+
+
+def test_checkpoint_from_another_site_is_not_used(site, tmp_path, monkeypatch, quiet):
+    log, _ = quiet
+    for f in ("add-customers.yaml", "customers.csv"):
+        (tmp_path / f).write_bytes((EXAMPLES / f).read_bytes())
+    job = load_job(tmp_path / "add-customers.yaml")
+    job.options.delay_ms = 0
+    run_fill(job, tmp_path / "out" / "r1", limit=2, progress=log)
+    with DemoSite(flaky=0) as other:  # e.g. a test site first, then the real one
+        monkeypatch.setenv("DEMO_URL", other.url)
+        with pytest.raises(JobError, match="is from an earlier run on http://127.0.0.1"):
+            run_fill(job, tmp_path / "out" / "r2", limit=2, progress=log)
+        res = run_fill(job, tmp_path / "out" / "r3", limit=2, fresh=True, progress=log)
+        assert res.count("done") == 2 and len(other.state.customers) == 3
+    # a checkpoint written by 1.0.0 ({key: values}) is still read
+    old = {"maya@brightside.example": {"reference": "X"}, "lucas@meyerplumbing.example": {"reference": "Y"}}
+    (tmp_path / "out" / "checkpoint.json").write_text(json.dumps(old))
+    monkeypatch.setenv("DEMO_URL", site.url)
+    again = run_fill(job, tmp_path / "out" / "r4", limit=2, progress=log)
+    assert [(r["status"], r["reference"]) for r in again.rows] == [("skipped", "X"), ("skipped", "Y")]
 
 
 def test_demo_uses_its_own_login(tmp_path, capsys, monkeypatch):

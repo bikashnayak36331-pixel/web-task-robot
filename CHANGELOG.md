@@ -2,7 +2,7 @@
 
 ## 1.1.0 (2026-10-16)
 
-Fixes for 25 problems found in a full end-to-end test: a clean install, every command and option, local test pages, and public practice websites.
+Fixes for 26 problems found in a full end-to-end test: a clean install, every command and option, local test pages, and public practice websites.
 
 **Reliability**
 - **A form is never sent twice by a retry.** If a site took longer than `timeout_ms` to answer, 1.0.0 sent the same form up to 3 times and then reported "failed", even though the first one was saved. Now a row is only retried before anything is sent, or when the site answers with an error page (HTTP 5xx or 429). Otherwise it fails with "not retried: the form may already have been sent".
@@ -19,6 +19,7 @@ Fixes for 25 problems found in a full end-to-end test: a clean install, every co
 - The output file type is checked before the run starts, not after every row has been sent.
 - Screenshot names that come from the data can't create folders or write outside the results folder.
 - Rows with an empty key are no longer treated as duplicates of each other.
+- **The checkpoint remembers which site and input file it belongs to.** In 1.0.0, running `webrobot demo` and then your own copy of the example skipped 8 rows as "done earlier" that had never been sent to your site. The same would happen after testing a job on a staging site and then running it on the live one. Now the robot stops and asks you to choose `--fresh` or another `--out` folder. `webrobot demo` also keeps its results in `out/demo`. Checkpoints written by 1.0.0 are still read.
 - JSON results have the same columns as CSV and Excel.
 
 **Job files and command line**
@@ -31,7 +32,7 @@ Fixes for 25 problems found in a full end-to-end test: a clean install, every co
 - No crash on a console that can't show some characters (older Windows code pages).
 - "Browser problem: …" with the install command instead of a traceback when Chromium is missing.
 - README: the "Write your own job" steps now include starting the practice site and setting the variables.
-- 54 tests (27 new). CI now also runs on Windows and macOS.
+- 55 tests (28 new). CI now also runs on Windows and macOS.
 
 ## 1.0.0 (2026-10-15)
 

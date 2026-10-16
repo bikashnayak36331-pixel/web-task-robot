@@ -18,7 +18,7 @@
 | The site is slow or flaky (timeouts, HTTP 5xx, 429) | Retries the row (default: up to 3 tries) with a pause in between |
 | A form was sent but the site took too long to answer | **Doesn't** send it again (that could save the same record twice). The row is marked failed with a note to check the site. After a form is sent, the robot only retries if the site answers with an error page (HTTP 5xx or 429) |
 | The site rejects the data ("email already exists", a browser validation error) | Records the site's own message and **doesn't** retry, since retrying wouldn't help. This also works on forms that save in the background with JavaScript |
-| The job stops halfway (crash, laptop closed, Ctrl+C) | Ctrl+C finishes the current row and still writes the results. Run the job again: rows already done are skipped using a checkpoint |
+| The job stops halfway (crash, laptop closed, Ctrl+C) | Ctrl+C finishes the current row and still writes the results. Run the job again: rows already done are skipped using a checkpoint. The checkpoint belongs to one site and input file, so a test run can't make the real run skip rows |
 | The same record appears twice in your file | The second copy is skipped and marked as a duplicate |
 | "Did it really work?" | Optional success check per row, a screenshot of every failure, an Excel file with a status column, and an HTML report |
 | Passwords | Kept in environment variables (`${PORTAL_PASSWORD}`), never in the job file or the results |
@@ -179,7 +179,7 @@ Exit codes: 0 when every row worked, 1 when some rows failed, 2 for a problem in
 
 ## Tested end to end
 
-Version 1.1.0 came out of a full test on 16 Oct 2026, which found 25 problems, all fixed (see the [changelog](CHANGELOG.md)). The test covered:
+Version 1.1.0 came out of a full test on 16 Oct 2026, which found 26 problems, all fixed (see the [changelog](CHANGELOG.md)). The test covered:
 
 - **A clean install** from GitHub on a new Linux machine, following this README.
 - **Every command, step and option**, against the practice site and local test pages: a slow server, JavaScript forms and lists, Excel dates, uploads, confirm boxes, Ctrl+C and odd files.
@@ -201,7 +201,7 @@ Only automate sites you own or have permission to use, and follow their terms. K
 ```bash
 git clone https://github.com/bikashnayak36331-pixel/web-task-robot && cd web-task-robot
 pip install -e ".[dev]" && python -m playwright install chromium
-pytest                          # 54 tests, including end-to-end runs in headless Chromium against local test sites
+pytest                          # 55 tests, including end-to-end runs in headless Chromium against local test sites
 ruff check . && ruff format --check .
 python scripts/record_demo.py   # re-record docs/images/demo.gif and report.png (needs ffmpeg)
 ```

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 
 from playwright.sync_api import Error as PlaywrightError
 from playwright.sync_api import Page, sync_playwright
@@ -352,6 +352,32 @@ class _CtrlC:
             signal.signal(signal.SIGINT, self.previous)
 
 
+def _target(job: Job) -> dict[str, Any]:
+    """What a checkpoint belongs to: the input file and the site(s) the job opens (scheme, host and port only)."""
+    sites = set()
+    for url in [job.login_url] + [s.args["url"] for s in job.steps if s.kind == "goto"]:
+        try:
+            parts = urlsplit(render(url))
+        except JobError:
+            continue
+        if parts.scheme in ("http", "https") and parts.netloc and "{" not in parts.netloc:
+            sites.add(f"{parts.scheme}://{parts.netloc}")
+    return {"input": job.input.name if job.input else "", "sites": sorted(sites)}
+
+
+def _load_checkpoint(path: Path, target: dict[str, Any]) -> dict[str, Any]:
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    if not (isinstance(saved, dict) and isinstance(saved.get("done"), dict) and "sites" in saved):
+        return saved  # a 1.0.0 checkpoint: {key: values}
+    if saved.get("sites") != target["sites"] or saved.get("input") != target["input"]:
+        raise JobError(
+            f"{path} is from an earlier run on {', '.join(saved.get('sites') or ['another site'])} "
+            f"with {saved.get('input')}, not {', '.join(target['sites']) or 'this site'} with {target['input']}. "
+            "To keep it, use another results folder (--out). To send every row again, use --fresh."
+        )
+    return saved["done"]
+
+
 def run_fill(
     job: Job,
     out_dir: Path,
@@ -369,11 +395,12 @@ def run_fill(
     out_dir.mkdir(parents=True, exist_ok=True)
     shots = out_dir / "screenshots"
     checkpoint_path = out_dir.parent / "checkpoint.json"
+    target = _target(job)
     done: dict[str, Any] = {}
     if fresh and checkpoint_path.exists():
         checkpoint_path.unlink()
     elif checkpoint_path.exists():
-        done = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        done = _load_checkpoint(checkpoint_path, target)
 
     result = RunResult(job, out_dir)
     extracted_cols: list[str] = []
@@ -480,7 +507,7 @@ def run_fill(
                 if status == "done":
                     done[key] = captured
                     tmp = checkpoint_path.with_suffix(".tmp")
-                    tmp.write_text(json.dumps(done, indent=1), encoding="utf-8")
+                    tmp.write_text(json.dumps({**target, "done": done}, indent=1), encoding="utf-8")
                     tmp.replace(checkpoint_path)  # atomic: a crash never leaves a half-written checkpoint
                 progress(f"{label}: {status}" + (f" ({message})" if message else "") + f" in {secs}s")
                 if job.options.delay_ms and n < len(rows) and not ctrl_c.requested:

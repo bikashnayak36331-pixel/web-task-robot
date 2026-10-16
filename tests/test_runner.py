@@ -62,7 +62,9 @@ def test_resume_skips_rows_done_earlier(site, tmp_path, quiet):
     job = fill_job(tmp_path)
     run_fill(job, tmp_path / "out" / "run1", progress=log)
     checkpoint = json.loads((tmp_path / "out" / "checkpoint.json").read_text())
-    assert len(checkpoint) == 7 and checkpoint["elena@petrova.example"] == {"reference": "CUS-1008"}
+    assert checkpoint["input"] == "customers.csv" and checkpoint["sites"] == [site.url]
+    done = checkpoint["done"]
+    assert len(done) == 7 and done["elena@petrova.example"] == {"reference": "CUS-1008"}
     again = run_fill(job, tmp_path / "out" / "run2", progress=log)
     assert again.count("skipped") == 8 and again.count("failed") == 2 and again.count("done") == 0
     assert by_email(again)["maya@brightside.example"]["reference"] == "CUS-1002"  # carried over
